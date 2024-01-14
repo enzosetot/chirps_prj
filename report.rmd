@@ -1,0 +1,164 @@
+---
+title: Chirps project
+author: Vincenzo Belcastro
+date: January 15, 2024
+output: html_document
+---
+
+## Task
+
+For each month, compute the number of rainy days,
+averaged over several years of data available, for the
+area of interest (see data attached), from the CHIRPS
+dataset (https://www.chc.ucsb.edu/data/chirps).
+
+### Expected output
+
+- 12 rasters (one per month), clipped to the same polygon mask as the AOI (area of
+interest, attached), displaying the average number of rainy days per month, rounded
+to the nearest integer.
+- Documentation of the data acquisition pipeline.
+
+### Input
+
+Area of interest (aoi.shp)
+
+## Implementation
+
+The idea is to fetch and process Chirps data by month. 
+
+### Load required packages
+
+```{r}
+# list of libraries loaded
+library(chirps)
+library(terra)
+library(lubridate)
+library(data.table)
+library(ggplot2)
+```
+
+### Define year range and load shapefile
+
+Here we
+- define year range (e.g. *c(2019:2021)*, *c(2019,2021)*)
+- load shapefile (aoi.shp) to extract the area of interest
+
+```{r, eval = FALSE}
+yy_range <- 2020:2022
+
+# build spacial vector from shape file
+sv <- vect("data/aoi.shp")
+```
+
+### Fetch and process Chirps data
+
+List of steps to fetch and process Chirps data for a month (multiple year):
+
+* fetch Chirps data over years
+* compute number of rainy days per year
+* average number of rainy days across years
+* mask area according to the area of interest
+
+#### Functions to fetch data
+
+The core function to fetch Chirps data is: `chirps_fetch_for_month()`. The function
+takes in input a year `yy` and a month `mm` as integers, and the `SpacialVector` object that
+encapsulate the area of interest. Data is fetcher via a call to `chirps::get_chirps()` 
+specifying date range, server, and desidered resolution (0.25 is also possible).
+
+```{r, eval = FALSE}
+# function to fetch chirps data for a given month and year
+chirps_fetch_for_month <- function(yy, mm, sv) {
+  # set first and last day of month
+  from <- as.Date(paste(yy, mm, 1, sep = "-"))
+  to <- get_last_day_of_month(yy, mm)
+
+  # fetch chirps data
+  get_chirps(sv, dates = c(from, to), server = "CHC", resolution = 0.05)
+}
+```
+
+The function `chirps_fetch_month_over_years()` is just a wrapper to loop across years range.
+
+```{r, eval = FALSE}
+# function to fetch chirps data for a specific month across multiple years
+# return: a list of SpatRaster objects of lenght equal to the number of years
+chirps_fetch_month_over_years <- function(yy_range, mm, sv) {
+  .fetch_month <- function(yy, mm, sv) {
+    chirps_fetch_for_month(yy, mm = mm, sv = sv)
+  }
+
+  lapply(yy_range, .fetch_month, mm = mm, sv = sv)
+}
+```
+
+The output of this function is a list of `SpatialRasters` inheriting attributes of the 
+`SpatialVector` in input: `sv`, such as *area extend* and *coordinate system*:
+
+```{r, echo = FALSE}
+example01 <- readRDS("output/example01.rds")
+example01 <- terra::unwrap(example01)
+example01
+```
+
+Spatial rasters in output contain, for each cell, the amount of rain per day (in millimiters).
+
+
+#### Compute number of rainy days
+
+To compute the number of rainy days is sufficient to sum all days with non-zero values
+
+```{r, eval = FALSE}
+# function to compute number of rainy days for a list of spatial rasters
+# return:  list of SpatRaster objects containing sums of rainy days
+compute_nb_of_rainy_days <- function(daily_mm_of_rain) {
+  lapply(daily_mm_of_rain, function(xx) sum(xx > 0))
+}
+```
+
+```{r, echo = FALSE}
+sum(example01 > 0)
+```
+
+#### Compute the avg number of rainy days over years
+
+The average number of rainy days over multiple years is computed by
+
+* flattening the list
+* compute average values
+* round to the closest integer
+* apply masking to hide regions outside the area of interest
+
+```{r, eval = FALSE}
+nb_rainy_days <- do.call(c, nb_rainy_days) # flatten list
+avg_rainy_days <- round(mean(nb_rainy_days, na.rm = TRUE)) # get rounded avg
+mask(avg_rainy_days, sv) # apply mask
+```
+
+### Plor rasters
+
+To plot rasters I use the `ggplot2` package.
+
+```{r, echo = FALSE}
+avg_rainy_days <- readRDS("output/avg_rainy_days.rds")
+avg_rainy_days <- terra::unwrap(avg_rainy_days)
+
+# prepare data for plotting
+names(avg_rainy_days) <- month.name[1:dim(avg_rainy_days)[3]]
+df <- as.data.frame(avg_rainy_days, xy = TRUE)
+df <- melt(as.data.table(df), id.vars = c("x", "y"))
+limits <- c(min(df$value), max(df$value))
+```
+
+```{r, fig.width = 10, fig.height = 10, eval = FALSE}
+ggplot(data = df, aes(x = x, y = y, fill = value)) +
+  geom_raster() + 
+  scale_fill_gradient(low="white", high = "red", limits = limits) +
+  coord_quickmap() + 
+  theme_minimal () +
+  labs(title = "Average number of rainy days", fill = "avg days") +
+  xlab("latitude") +
+  ylab("longitude") +
+  facet_wrap(~variable, ncol=3)
+```
