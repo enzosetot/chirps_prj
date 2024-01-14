@@ -41,7 +41,6 @@ library(ggplot2)
 
 ## Define year range and load shapefile
 
-Here we
 - define year range (e.g. *c(2019:2021)*, *c(2019,2021)*)
 - load shapefile (aoi.shp) to extract the area of interest
 
@@ -108,7 +107,7 @@ Spatial rasters in output contain, for each cell, the amount of rain per day (in
 
 ### Compute number of rainy days
 
-To compute the number of rainy days is sufficient to sum all days with non-zero values
+To compute the number of rainy days is sufficient to sum the number of days with non-zero values
 
 ```{r, eval = FALSE}
 # function to compute number of rainy days for a list of spatial rasters
