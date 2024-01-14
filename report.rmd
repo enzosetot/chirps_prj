@@ -2,32 +2,33 @@
 title: Chirps project
 author: Vincenzo Belcastro
 date: January 15, 2024
-output: html_document
+output: pdf_document
+geometry: margin=2cm
 ---
 
-## Task
+# Task
 
 For each month, compute the number of rainy days,
 averaged over several years of data available, for the
 area of interest (see data attached), from the CHIRPS
 dataset (https://www.chc.ucsb.edu/data/chirps).
 
-### Expected output
+## Expected output
 
 - 12 rasters (one per month), clipped to the same polygon mask as the AOI (area of
 interest, attached), displaying the average number of rainy days per month, rounded
 to the nearest integer.
 - Documentation of the data acquisition pipeline.
 
-### Input
+## Input
 
 Area of interest (aoi.shp)
 
-## Implementation
+# Implementation
 
 The idea is to fetch and process Chirps data by month. 
 
-### Load required packages
+## Load required packages
 
 ```{r}
 # list of libraries loaded
@@ -38,7 +39,7 @@ library(data.table)
 library(ggplot2)
 ```
 
-### Define year range and load shapefile
+## Define year range and load shapefile
 
 Here we
 - define year range (e.g. *c(2019:2021)*, *c(2019,2021)*)
@@ -51,7 +52,7 @@ yy_range <- 2020:2022
 sv <- vect("data/aoi.shp")
 ```
 
-### Fetch and process Chirps data
+## Fetch and process Chirps data
 
 List of steps to fetch and process Chirps data for a month (multiple year):
 
@@ -60,7 +61,7 @@ List of steps to fetch and process Chirps data for a month (multiple year):
 * average number of rainy days across years
 * mask area according to the area of interest
 
-#### Functions to fetch data
+### Functions to fetch data
 
 The core function to fetch Chirps data is: `chirps_fetch_for_month()`. The function
 takes in input a year `yy` and a month `mm` as integers, and the `SpacialVector` object that
@@ -94,18 +95,18 @@ chirps_fetch_month_over_years <- function(yy_range, mm, sv) {
 ```
 
 The output of this function is a list of `SpatialRasters` inheriting attributes of the 
-`SpatialVector` in input: `sv`, such as *area extend* and *coordinate system*:
+`SpatialVector` in input, `sv`, such as *area extend* and *coordinate system*:
 
 ```{r, echo = FALSE}
 example01 <- readRDS("output/example01.rds")
 example01 <- terra::unwrap(example01)
-example01
+names(example01) <- gsub("chirps-v2.0.", "", names(example01))
+signif(example01, 2)
 ```
 
 Spatial rasters in output contain, for each cell, the amount of rain per day (in millimiters).
 
-
-#### Compute number of rainy days
+### Compute number of rainy days
 
 To compute the number of rainy days is sufficient to sum all days with non-zero values
 
@@ -117,11 +118,13 @@ compute_nb_of_rainy_days <- function(daily_mm_of_rain) {
 }
 ```
 
+Here an example of output:
+
 ```{r, echo = FALSE}
 sum(example01 > 0)
 ```
 
-#### Compute the avg number of rainy days over years
+### Compute the avg number of rainy days over years
 
 The average number of rainy days over multiple years is computed by
 
@@ -136,7 +139,15 @@ avg_rainy_days <- round(mean(nb_rainy_days, na.rm = TRUE)) # get rounded avg
 mask(avg_rainy_days, sv) # apply mask
 ```
 
-### Plor rasters
+Aggregated output:
+
+```{r, echo = FALSE}
+avg_rainy_days <- readRDS("output/avg_rainy_days.rds")
+avg_rainy_days <- terra::unwrap(avg_rainy_days)
+avg_rainy_days
+```
+
+## Plor rasters
 
 To plot rasters I use the `ggplot2` package.
 
@@ -145,16 +156,17 @@ avg_rainy_days <- readRDS("output/avg_rainy_days.rds")
 avg_rainy_days <- terra::unwrap(avg_rainy_days)
 
 # prepare data for plotting
-names(avg_rainy_days) <- month.name[1:dim(avg_rainy_days)[3]]
 df <- as.data.frame(avg_rainy_days, xy = TRUE)
 df <- melt(as.data.table(df), id.vars = c("x", "y"))
 limits <- c(min(df$value), max(df$value))
+colors <- colorRampPalette(c("white", "red"))(limits[2]+1)
 ```
 
-```{r, fig.width = 10, fig.height = 10, eval = FALSE}
-ggplot(data = df, aes(x = x, y = y, fill = value)) +
+```{r, fig.height = 15, fig.width = 13, eval = TRUE}
+ggplot(data = df, aes(x = x, y = y, fill = factor(value))) +
   geom_raster() + 
-  scale_fill_gradient(low="white", high = "red", limits = limits) +
+  # scale_fill_gradient(low="white", high = "red", limits = limits) +
+  scale_fill_manual(values = rev(colors), breaks=limits[2]:0) +
   coord_quickmap() + 
   theme_minimal () +
   labs(title = "Average number of rainy days", fill = "avg days") +

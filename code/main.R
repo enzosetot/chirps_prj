@@ -74,10 +74,11 @@ avg_rainy_days <- lapply(1:12,
   get_avg_rainy_days_per_month, yy_range = yy_range, sv = sv
 )
 avg_rainy_days <- do.call(c, avg_rainy_days) # aggregate
+names(avg_rainy_days) <- month.name[1:dim(avg_rainy_days)[3]]
 
 # avg_rainy_days <- terra::wrap(avg_rainy_days)
-# saveRDS(avg_rainy_days, file = "avg_rainy_days.rds")
-# avg_rainy_days <- readRDS("avg_rainy_days.rds")
+# saveRDS(avg_rainy_days, file = "output/avg_rainy_days.rds")
+# avg_rainy_days <- readRDS("output/avg_rainy_days.rds")
 # avg_rainy_days <- terra::unwrap(avg_rainy_days)
 
 # example01 <- terra::wrap(example01)
@@ -86,14 +87,15 @@ avg_rainy_days <- do.call(c, avg_rainy_days) # aggregate
 # example01 <- terra::unwrap(example01)
 
 # prepare data for plotting
-names(avg_rainy_days) <- month.name[1:dim(avg_rainy_days)[3]]
 df <- as.data.frame(avg_rainy_days, xy = TRUE)
 df <- melt(as.data.table(df), id.vars = c("x", "y"))
 limits <- c(min(df$value), max(df$value))
+colors <- colorRampPalette(c("white", "red"))(limits[2]+1)
 
-ggplot(data = df, aes(x = x, y = y, fill = value)) +
+ggplot(data = df, aes(x = x, y = y, fill = factor(value))) +
   geom_raster() + 
-  scale_fill_gradient(low="white", high = "red", limits=limits) +
+  # scale_fill_gradient(low="white", high = "red", limits = limits) +
+  scale_fill_manual(values = rev(colors), breaks=limits[2]:0) +
   coord_quickmap() + 
   theme_minimal () +
   labs(title = "Average number of rainy days", fill = "avg days") +
@@ -104,4 +106,4 @@ ggplot(data = df, aes(x = x, y = y, fill = value)) +
 
 ### generate report
 library("rmarkdown")
-render("code/report.rmd")
+render("report.rmd")
